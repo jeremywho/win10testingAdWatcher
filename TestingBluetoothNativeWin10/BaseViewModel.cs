@@ -1,7 +1,5 @@
-﻿using System;
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Windows.Input;
 using TestingBluetoothNativeWin10.Annotations;
 
 namespace TestingBluetoothNativeWin10
@@ -27,29 +25,6 @@ namespace TestingBluetoothNativeWin10
             OnPropertyChanged(propertyName);
 
             return true;
-        }
-    }
-
-    public class Command : ICommand
-    {
-        private readonly Action _action;
-        private readonly bool _canExecute;
-        public Command(Action action, bool canExecute = true)
-        {
-            _action = action;
-            _canExecute = canExecute;
-        }
-
-        public bool CanExecute(object parameter)
-        {
-            return _canExecute;
-        }
-
-        public event EventHandler CanExecuteChanged;
-
-        public void Execute(object parameter)
-        {
-            _action();
         }
     }
 }

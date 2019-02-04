@@ -3,7 +3,6 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
 using System.Windows;
-using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
 
 namespace TestingBluetoothNativeWin10
@@ -12,7 +11,7 @@ namespace TestingBluetoothNativeWin10
     {
         public ObservableCollection<DeviceViewModel> Devices { get; } = new ObservableCollection<DeviceViewModel>();
         private readonly BluetoothLEAdvertisementWatcher _watcher;
-       
+        private object _locker = new object();
 
         public MainWindowViewModel()
         {
@@ -30,62 +29,43 @@ namespace TestingBluetoothNativeWin10
 
         private void OnAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs eventArgs)
         {
-            //System.Diagnostics.Debug.WriteLine($"Got OnAdvertisementReceived");
-            // We can obtain various information about the advertisement we just received by accessing 
-            // the properties of the EventArgs class
             if (string.IsNullOrEmpty(eventArgs.Advertisement.LocalName)) return;
-            // The timestamp of the event
-            DateTimeOffset timestamp = eventArgs.Timestamp;
 
-            // The type of advertisement
-            BluetoothLEAdvertisementType advertisementType = eventArgs.AdvertisementType;
-
-            // The received signal strength indicator (RSSI)
-            Int16 rssi = eventArgs.RawSignalStrengthInDBm;
-
-            // The local name of the advertising device contained within the payload, if any
-            string localName = eventArgs.Advertisement.LocalName;
-
-            // Check if there are any manufacturer-specific sections.
-            // If there is, print the raw data of the first manufacturer section (if there are multiple).
-            //string manufacturerDataString = "";
-            //var manufacturerSections = eventArgs.Advertisement.ManufacturerData;
-            //if (manufacturerSections.Count > 0)
-            //{
-            //    // Only print the first one of the list
-            //    var manufacturerData = manufacturerSections[0];
-            //    var data = new byte[manufacturerData.Data.Length];
-            //    using (var reader = DataReader.FromBuffer(manufacturerData.Data))
-            //    {
-            //        reader.ReadBytes(data);
-            //    }
-            //    // Print the company ID + the raw data in hex format
-            //    manufacturerDataString = string.Format("0x{0}: {1}",
-            //        manufacturerData.CompanyId.ToString("X"),
-            //        BitConverter.ToString(data));
-            //}
+            var timestamp = eventArgs.Timestamp;
+            var advertisementType = eventArgs.AdvertisementType;
+            var rssi = eventArgs.RawSignalStrengthInDBm;
+            var localName = eventArgs.Advertisement.LocalName;
 
             Debug.WriteLine($"[{DateTime.Now}] [{timestamp}] [{localName}] [{rssi}] [{advertisementType}]");
 
-            if (Devices.Any(d => d.BluetoothAddress == eventArgs.BluetoothAddress))
-                return;
+            lock(_locker)
+            {
+                var foundDevice = Devices.FirstOrDefault(d => d.BluetoothAddress == eventArgs.BluetoothAddress.ToString());
+                if (foundDevice != null)
+                {
+                    foundDevice.LastSeen = timestamp.ToString();
+                    return;
+                }
+            }
 
-            var device = new DeviceViewModel(eventArgs.Advertisement.LocalName, eventArgs.BluetoothAddress);
             Application.Current.Dispatcher.Invoke(() =>
             {
-                Devices.Add(device);
+                lock (_locker)
+                {
+                    var device = new DeviceViewModel(eventArgs.Advertisement.LocalName, eventArgs.BluetoothAddress, timestamp);
+                    Devices.Add(device);
+                }
             });
         }
     }
 
     public class DeviceViewModel : BaseViewModel
     {
-        public DeviceViewModel(string name, ulong addr, string id = "")
+        public DeviceViewModel(string name, ulong addr, DateTimeOffset lastSeen)
         {
             Name = name;
-            Id = id;
-            BluetoothAddress = addr;
-            Status = BluetoothConnectionStatus.Disconnected.ToString();
+            BluetoothAddress = addr.ToString();
+            LastSeen = lastSeen.ToString();
         }
 
         private string _name;
@@ -95,27 +75,18 @@ namespace TestingBluetoothNativeWin10
             set => AssignProperty(ref _name, value);
         }
 
-        private string _id;
-        public string Id
-        {
-            get => _id;
-            set => AssignProperty(ref _id, value);
-        }
-
-        private string _status;
-        public string Status
-        {
-            get => _status;
-            set => AssignProperty(ref _status, value);
-        }
-
-        private ulong _bluetoothAddress;
-        public ulong BluetoothAddress
+        private string _bluetoothAddress;
+        public string BluetoothAddress
         {
             get => _bluetoothAddress;
             set => AssignProperty(ref _bluetoothAddress, value);
         }
 
-        public string BtAddressDisplay => BluetoothAddress.ToString();
+        private string _lastSeen;
+        public string LastSeen
+        {
+            get => _lastSeen;
+            set => AssignProperty(ref _lastSeen, value);
+        }
     }
 }
